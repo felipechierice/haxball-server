@@ -1,0 +1,29 @@
+{
+  "name": "haxball-server",
+  "version": "1.0.0",
+  "description": "Servidor Haxball headless usando Node.js e Puppeteer",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js src/rooms/matchmaking-3v3.js",
+    "dev": "node src/index.js",
+    "example": "node src/index.js src/rooms/example-room.js",
+    "matchmaking": "node src/index.js src/rooms/matchmaking-3v3.js",
+    "admin": "node src/index.js src/rooms/admin-system.js",
+    "pro": "node src/index.js src/rooms/professional-room.js"
+  },
+  "keywords": [
+    "haxball",
+    "server",
+    "puppeteer",
+    "headless",
+    "bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.6.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
