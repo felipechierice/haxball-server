@@ -9,7 +9,7 @@ const roomConfig = {
     maxPlayers: 16,
     public: false, // true para aparecer na lista pública
     noPlayer: true, // Recomendado: remove o player host
-    token: "thr1.AAAAAGk3CempOo2dcy7r7w.viZtagoKM9c" // Obtenha em: https://www.haxball.com/headlesstoken
+    token: "thr1.AAAAAGm-4TE1vTJJENeBtQ.Mb4Ws65iXx4" // Obtenha em: https://www.haxball.com/headlesstoken
 };
 
 // Inicializa a sala

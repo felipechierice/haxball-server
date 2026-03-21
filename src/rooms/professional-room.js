@@ -14,7 +14,7 @@ const roomConfig = {
     maxPlayers: 20,
     public: false,
     noPlayer: true,
-    token: "" // https://www.haxball.com/headlesstoken
+    token: "thr1.AAAAAGk3CempOo2dcy7r7w.viZtagoKM9c" // https://www.haxball.com/headlesstoken
 };
 
 const room = HBInit(roomConfig);

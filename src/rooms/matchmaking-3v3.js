@@ -14,7 +14,7 @@ const roomConfig = {
     maxPlayers: 18,  // 6 jogadores + 12 espectadores
     public: true,
     noPlayer: true,  // DEVE SER TRUE para criar o bot admin automaticamente
-    token: "thr1.AAAAAGk63dZC_XRdDXG_EQ.771e-5ZPX8U" // Obtenha em: https://www.haxball.com/headlesstoken
+    token: "thr1.AAAAAGm-4v2WZaETOTbT6Q.RrJoztf9F-E" // Obtenha em: https://www.haxball.com/headlesstoken
 };
 
 const room = HBInit(roomConfig);

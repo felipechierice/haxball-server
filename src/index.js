@@ -9,12 +9,65 @@ const path = require('path');
  */
 async function initHaxballServer(roomScriptFile, options = {}) {
     const {
-        headless = true,
+        headless = 'new',
         devtools = false,
         args = ['--no-sandbox', '--disable-setuid-sandbox']
     } = options;
 
     console.log('🚀 Iniciando servidor Haxball...');
+
+    const getRoomLinkFromContext = async (context) => {
+        const selectors = ['#roomlink a', '#roomlink'];
+
+        for (const selector of selectors) {
+            try {
+                const link = await context.$eval(selector, el => {
+                    if (el.tagName === 'A') {
+                        return el.getAttribute('href') || el.textContent;
+                    }
+
+                    const anchor = el.querySelector('a');
+                    if (anchor) {
+                        return anchor.getAttribute('href') || anchor.textContent;
+                    }
+
+                    return el.textContent;
+                });
+
+                if (link && typeof link === 'string' && link.includes('haxball.com/play?c=')) {
+                    return link.trim();
+                }
+            } catch (err) {
+                // Selector não disponível nesse contexto, tenta o próximo.
+            }
+        }
+
+        return null;
+    };
+
+    const waitForRoomLink = async (page) => {
+        const deadline = Date.now() + 20000;
+
+        while (Date.now() < deadline) {
+            const frames = page.frames();
+
+            for (const frame of frames) {
+                const roomLink = await getRoomLinkFromContext(frame);
+                if (roomLink) {
+                    return roomLink;
+                }
+            }
+
+            const pageRoomLink = await getRoomLinkFromContext(page);
+            if (pageRoomLink) {
+                return pageRoomLink;
+            }
+
+            await page.waitForTimeout(500);
+        }
+
+        return null;
+    };
     
     const browser = await puppeteer.launch({
         headless,
@@ -68,30 +121,29 @@ async function initHaxballServer(roomScriptFile, options = {}) {
         const elementHandle = await page.$('iframe');
         if (elementHandle) {
             const frame = await elementHandle.contentFrame();
-            
-            try {
-                const recaptcha = await frame.$('#recaptcha');
-                if (recaptcha) {
-                    const recaptchaContent = await frame.$eval('#recaptcha', e => e.innerHTML);
-                    if (recaptchaContent && recaptchaContent.trim()) {
-                        throw new Error('Token inválido ou expirado. Obtenha um novo token em: https://www.haxball.com/headlesstoken');
-                    }
-                }
-            } catch (err) {
-                // Se não encontrar recaptcha, continua normalmente
-            }
 
-            // Tenta obter o link da sala
-            try {
-                const roomLink = await frame.$eval('#roomlink a', e => e.getAttribute('href'));
-                if (roomLink) {
-                    console.log('\n✅ Sala aberta com sucesso!');
-                    console.log('🔗 Link da sala:', roomLink);
-                    console.log('\n💡 A sala está rodando. Pressione Ctrl+C para encerrar.\n');
+            if (frame) {
+                try {
+                    const recaptcha = await frame.$('#recaptcha');
+                    if (recaptcha) {
+                        const recaptchaContent = await frame.$eval('#recaptcha', e => e.innerHTML);
+                        if (recaptchaContent && recaptchaContent.trim()) {
+                            throw new Error('Token inválido ou expirado. Obtenha um novo token em: https://www.haxball.com/headlesstoken');
+                        }
+                    }
+                } catch (err) {
+                    // Se não encontrar recaptcha, continua normalmente
                 }
-            } catch (err) {
-                console.log('⚠️  Sala iniciada, mas não foi possível obter o link automaticamente.');
             }
+        }
+
+        const roomLink = await waitForRoomLink(page);
+        if (roomLink) {
+            console.log('\n✅ Sala aberta com sucesso!');
+            console.log('🔗 Link da sala:', roomLink);
+            console.log('\n💡 A sala está rodando. Pressione Ctrl+C para encerrar.\n');
+        } else {
+            console.log('⚠️  Sala iniciada, mas não foi possível obter o link automaticamente.');
         }
 
         // Mantém o processo rodando
@@ -125,7 +177,7 @@ async function main() {
 
     try {
         const { browser, page } = await initHaxballServer(roomScriptFile, {
-            headless: true,
+            headless: 'new',
             devtools: false
         });
 
