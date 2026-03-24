@@ -204,7 +204,11 @@ const state = {
     isTransitioning: false,
     
     // Contador de gols por jogador na partida atual
-    matchGoals: new Map()  // playerId -> quantidade de gols na partida atual
+    matchGoals: new Map(),  // playerId -> quantidade de gols na partida atual
+
+    // Anti-AFK
+    afkData: new Map(),   // playerId -> { lastActivity: timestamp, stage: 0|1|2 }
+    afkInterval: null
 };
 
 // ============================================================================
@@ -945,6 +949,88 @@ function handleVote(player, vote) {
 }
 
 // ============================================================================
+// SISTEMA ANTI-AFK
+// ============================================================================
+
+const AFK_THRESHOLDS = {
+    FIRST_WARNING: 10,   // segundos de inatividade até o primeiro aviso
+    SECOND_WARNING: 15,  // segundos até o segundo aviso
+    KICK: 20             // segundos até o kick
+};
+
+function resetAfkTimer(playerId) {
+    state.afkData.set(playerId, { lastActivity: Date.now(), stage: 0 });
+}
+
+function checkAfkPlayers() {
+    if (!state.gameRunning || state.soloTrainingMode) return;
+
+    const now = Date.now();
+
+    state.afkData.forEach((data, playerId) => {
+        const player = room.getPlayer(playerId);
+        if (!player || player.team === TEAMS.SPEC) {
+            state.afkData.delete(playerId);
+            return;
+        }
+
+        const inactiveSeconds = (now - data.lastActivity) / 1000;
+
+        if (data.stage === 0 && inactiveSeconds >= AFK_THRESHOLDS.FIRST_WARNING) {
+            data.stage = 1;
+            announce(
+                `⚠️ ${player.name}, você está AFK! Mova-se ou será kickado em 10 segundos!`,
+                null,
+                COLORS.WARNING,
+                "bold",
+                2
+            );
+        } else if (data.stage === 1 && inactiveSeconds >= AFK_THRESHOLDS.SECOND_WARNING) {
+            data.stage = 2;
+            announce(
+                `🚨 ${player.name}, ÚLTIMO AVISO! Você será kickado em 5 segundos por AFK!`,
+                null,
+                COLORS.ERROR,
+                "bold",
+                2
+            );
+        } else if (data.stage === 2 && inactiveSeconds >= AFK_THRESHOLDS.KICK) {
+            state.afkData.delete(playerId);
+            announce(
+                `🔴 ${player.name} foi kickado por AFK durante a partida.`,
+                null,
+                COLORS.ERROR,
+                "bold",
+                2
+            );
+            room.kickPlayer(playerId, "AFK durante a partida", false);
+        }
+    });
+}
+
+function startAfkMonitoring() {
+    if (state.soloTrainingMode) return;
+
+    stopAfkMonitoring();
+
+    const players = room.getPlayerList().filter(p =>
+        p.id !== state.botId && (p.team === TEAMS.RED || p.team === TEAMS.BLUE)
+    );
+    players.forEach(p => resetAfkTimer(p.id));
+
+    state.afkInterval = setInterval(checkAfkPlayers, 1000);
+    console.log('✅ Sistema anti-AFK iniciado');
+}
+
+function stopAfkMonitoring() {
+    if (state.afkInterval) {
+        clearInterval(state.afkInterval);
+        state.afkInterval = null;
+    }
+    state.afkData.clear();
+}
+
+// ============================================================================
 // ADIÇÃO AUTOMÁTICA DE JOGADORES DURANTE PARTIDA
 // ============================================================================
 
@@ -1239,7 +1325,10 @@ room.onPlayerLeave = function(player) {
         state.spectatorQueue.delete(player.id);
         console.log(`🗑️ ${player.name} removido da fila de espectadores`);
     }
-    
+
+    // Remove dados anti-AFK
+    state.afkData.delete(player.id);
+
     // Remove voto se estava votando
     if (state.votes.has(player.id)) {
         state.votes.delete(player.id);
@@ -1444,6 +1533,9 @@ room.onGameStart = function(byPlayer) {
         }, 1000);
         
         console.log('✅ Sistema de validação contínua iniciado (1 validação/segundo)');
+
+        // Inicia o sistema anti-AFK
+        startAfkMonitoring();
     }, 3000);
 };
 
@@ -1463,6 +1555,7 @@ room.onGameStop = function(byPlayer) {
     
     // Para o loop de validação
     stopValidationLoop();
+    stopAfkMonitoring();
 };
 
 room.onGamePause = function(byPlayer) {
@@ -1496,6 +1589,15 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
             console.log(`✅ ${changedPlayer.name} saiu da fila de espectadores`);
         }
     }
+
+    // Anti-AFK: gerencia monitoramento ao mudar de time
+    if (changedPlayer.id !== state.botId) {
+        if (changedPlayer.team === TEAMS.SPEC) {
+            state.afkData.delete(changedPlayer.id);
+        } else if (state.gameRunning && !state.soloTrainingMode) {
+            resetAfkTimer(changedPlayer.id);
+        }
+    }
     
     // PROTEÇÃO 2: Durante o jogo, valida se o time não ficou com mais jogadores que o permitido
     if (state.gameRunning && changedPlayer.team !== TEAMS.SPEC) {
@@ -1518,6 +1620,16 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
             }
         }, 100);
     }
+};
+
+room.onPlayerActivity = function(player) {
+    if (!state.gameRunning || state.soloTrainingMode) return;
+    if (player.id === state.botId) return;
+    if (!state.afkData.has(player.id)) return;
+
+    const data = state.afkData.get(player.id);
+    data.lastActivity = Date.now();
+    data.stage = 0;
 };
 
 room.onRoomLink = function(url) {
